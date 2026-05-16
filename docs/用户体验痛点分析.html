@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Animal Video Studio - 用户体验痛点分析</title>
+<style>
+:root {
+  --bg: #fafafa;
+  --surface: #ffffff;
+  --text: #1a1a2e;
+  --muted: #6b7280;
+  --border: #e5e7eb;
+  --red: #dc2626;
+  --red-bg: #fef2f2;
+  --orange: #ea580c;
+  --orange-bg: #fff7ed;
+  --yellow: #ca8a04;
+  --yellow-bg: #fefce8;
+  --green: #16a34a;
+  --green-bg: #f0fdf4;
+  --blue: #2563eb;
+  --blue-bg: #eff6ff;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: system-ui, -apple-system, sans-serif; background: var(--bg); color: var(--text); line-height: 1.6; padding: 2rem; }
+h1 { font-size: 1.75rem; margin-bottom: 0.5rem; }
+h2 { font-size: 1.25rem; margin: 1.5rem 0 0.75rem; padding-bottom: 0.5rem; border-bottom: 2px solid var(--border); }
+h3 { font-size: 1rem; margin: 1rem 0 0.5rem; }
+.subtitle { color: var(--muted); margin-bottom: 2rem; }
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 1.25rem; margin-bottom: 1rem; }
+.badge { display: inline-block; padding: 2px 10px; border-radius: 12px; font-size: 0.8rem; font-weight: 600; }
+.badge-critical { background: var(--red-bg); color: var(--red); }
+.badge-high { background: var(--orange-bg); color: var(--orange); }
+.badge-medium { background: var(--yellow-bg); color: var(--yellow); }
+.badge-low { background: var(--green-bg); color: var(--green); }
+.badge-info { background: var(--blue-bg); color: var(--blue); }
+table { width: 100%; border-collapse: collapse; margin: 0.75rem 0; }
+th, td { text-align: left; padding: 0.6rem 0.75rem; border-bottom: 1px solid var(--border); font-size: 0.9rem; }
+th { background: #f9fafb; font-weight: 600; color: var(--muted); font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em; }
+tr:nth-child(even) { background: #fafafa; }
+code { background: #f3f4f6; padding: 2px 6px; border-radius: 4px; font-family: ui-monospace, monospace; font-size: 0.85rem; }
+pre { background: #1e1e2e; color: #cdd6f4; padding: 1rem; border-radius: 8px; overflow-x: auto; font-size: 0.85rem; line-height: 1.5; margin: 0.5rem 0; }
+.root-cause { background: var(--red-bg); border-left: 3px solid var(--red); padding: 0.75rem 1rem; margin: 0.5rem 0; font-size: 0.9rem; }
+.suggestion { background: var(--blue-bg); border-left: 3px solid var(--blue); padding: 0.75rem 1rem; margin: 0.5rem 0; font-size: 0.9rem; }
+.section-summary { color: var(--muted); font-size: 0.9rem; margin-bottom: 1rem; }
+.flow { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; margin: 0.75rem 0; }
+.flow-step { background: var(--blue-bg); color: var(--blue); padding: 4px 12px; border-radius: 16px; font-size: 0.85rem; font-weight: 500; }
+.flow-arrow { color: var(--muted); font-size: 1.2rem; }
+.flow-broken { background: var(--red-bg); color: var(--red); }
+.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+@media (max-width: 800px) { .grid-2 { grid-template-columns: 1fr; } }
+.summary-box { background: linear-gradient(135deg, #fef2f2, #fff7ed); border: 1px solid #fecaca; border-radius: 10px; padding: 1.5rem; margin: 1.5rem 0; }
+.summary-box h2 { border: none; margin-top: 0; color: var(--red); }
+</style>
+</head>
+<body>
+
+<h1>Animal Video Studio — 用户体验痛点分析</h1>
+<p class="subtitle">基于当前代码实现（server.js + public/app.js + lib/*）的根因分析</p>
+
+<div class="summary-box">
+  <h2>核心问题概览</h2>
+  <p>当前系统有 <strong>3 个严重痛点</strong>、<strong>2 个高优先级问题</strong>，全部源自同一根因：<code>innerHTML</code> 全量替换 + 2.5s 轮询的渲染架构。这不是多个独立 bug，是一个架构问题的多个症状。</p>
+</div>
+
+<!-- ====== PAIN POINT 1 ====== -->
+<h2>痛点一：页面疯狂刷新 / 图片闪烁</h2>
+<p class="section-summary">用户感知：页面不停闪烁、图片跳动、体验极不稳定</p>
+
+<div class="card">
+  <h3>根因</h3>
+  <div class="root-cause">
+    <code>app.js:666-675</code> — 每 <strong>2.5 秒</strong>执行一次 <code>setInterval</code>，调用 <code>loadHistory()</code> 触发全量 DOM 重建。<code>renderTask()</code> 使用 <code>element.innerHTML = ...</code> 把整个 tab 内容替换掉。
+  </div>
+
+  <table>
+    <tr><th>触发源</th><th>频率</th><th>影响范围</th></tr>
+    <tr><td><code>startPolling()</code></td><td>每 2.5s</td><td>首页列表 + 任务页（条件触发）</td></tr>
+    <tr><td><code>runTaskAction()</code></td><td>每次点击生成按钮</td><td>连续两次渲染：<code>renderTask()</code> → <code>loadHistory()</code></td></tr>
+    <tr><td><code>hashchange</code> 事件</td><td>路由变化时</td><td>全量重绘</td></tr>
+  </table>
+
+  <h3>具体症状</h3>
+  <table>
+    <tr><th>症状</th><th>触发代码</th><th>严重度</th></tr>
+    <tr><td>图片区域闪烁</td><td><code>innerHTML</code> 替换整个 asset/shot 卡片</td><td><span class="badge badge-critical">严重</span></td></tr>
+    <tr><td>滚动位置跳动</td><td>DOM 节点被销毁再重建，浏览器无法保持滚动</td><td><span class="badge badge-critical">严重</span></td></tr>
+    <tr><td>操作反馈丢失</td><td>按钮点击后 DOM 重建，hover/click 状态消失</td><td><span class="badge badge-high">高</span></td></tr>
+  </table>
+</div>
+
+<!-- ====== PAIN POINT 2 ====== -->
+<h2>痛点二：提示词框瞬间关闭 / 无法阅读</h2>
+<p class="section-summary">用户感知：打开提示词 &lt;details&gt; 后马上又合上，根本看不清内容</p>
+
+<div class="card">
+  <h3>根因</h3>
+  <div class="root-cause">
+    <code>app.js:404</code>（Assets）和 <code>app.js:487-500</code>（Shots）— 提示词包裹在 <code>&lt;details&gt;</code> 元素中，但每次渲染都是 <code>innerHTML</code> 重建。2.5s 轮询触发后，所有 <code>&lt;details&gt;</code> 回到默认关闭状态。
+  </div>
+
+  <pre>用户操作流程：
+1. 点击 &lt;details&gt; 展开提示词
+2. ...2.5秒后轮询触发...
+3. innerHTML = renderAssets()  →  整个卡片重建
+4. &lt;details&gt; 回到 collapsed 状态 → 提示词消失
+5. 用户再次点击展开
+6. ...2.5秒后又关闭...  ∞ 循环</pre>
+
+  <h3>涉及位置</h3>
+  <table>
+    <tr><th>文件</th><th>行号</th><th>元素</th></tr>
+    <tr><td><code>app.js</code></td><td>404</td><td>Asset 卡片中的 prompt <code>&lt;details&gt;</code></td></tr>
+    <tr><td><code>app.js</code></td><td>489</td><td>Shot 卡片中的 firstFramePrompt <code>&lt;details&gt;</code></td></tr>
+    <tr><td><code>app.js</code></td><td>499</td><td>Shot 卡片中的 videoPrompt <code>&lt;details&gt;</code></td></tr>
+  </table>
+
+  <div class="suggestion">
+    <strong>方向：</strong>要么改为增量更新（只更新状态变化的 DOM 节点），要么记住 <code>&lt;details&gt;</code> 的展开状态并在重新渲染后恢复。
+  </div>
+</div>
+
+<!-- ====== PAIN POINT 3 ====== -->
+<h2>痛点三：无手动操作入口 / 系统卡死时零退路</h2>
+<p class="section-summary">用户感知：系统出问题时完全无法手动介入，所有流程被锁死在自动化管道里</p>
+
+<div class="card">
+  <h3>当前自动化管道（不可中断）</h3>
+  <div class="flow">
+    <span class="flow-step">方向设定</span>
+    <span class="flow-arrow">→</span>
+    <span class="flow-step">生成脚本</span>
+    <span class="flow-arrow">→</span>
+    <span class="flow-step">审批脚本</span>
+    <span class="flow-arrow">→</span>
+    <span class="flow-step">生成基础资产</span>
+    <span class="flow-arrow">→</span>
+    <span class="flow-step">审批资产</span>
+    <span class="flow-arrow">→</span>
+    <span class="flow-step">生成构图/首帧</span>
+    <span class="flow-arrow">→</span>
+    <span class="flow-step">审批首帧</span>
+    <span class="flow-arrow">→</span>
+    <span class="flow-step flow-broken">生成视频</span>
+  </div>
+  <p>每一步都依赖上一步的 <strong>审批状态</strong>，且没有旁路。</p>
+
+  <h3>缺失的手动能力</h3>
+  <table>
+    <tr><th>缺失能力</th><th>用户想要的操作</th><th>当前状态</th></tr>
+    <tr>
+      <td><strong>编辑提示词</strong></td>
+      <td>手动修改 AI 生成的提示词后再点生成</td>
+      <td><span class="badge badge-critical">缺失</span> 提示词是只读的 <code>&lt;p class="prompt"&gt;</code>，无 textarea</td>
+    </tr>
+    <tr>
+      <td><strong>手动上传生成结果</strong></td>
+      <td>复制提示词 → 去其他地方生成 → 上传图片回系统</td>
+      <td><span class="badge badge-critical">缺失</span> 无上传入口，无"手动完成"按钮</td>
+    </tr>
+    <tr>
+      <td><strong>取消正在进行的生成</strong></td>
+      <td>生成卡住时能取消重试</td>
+      <td><span class="badge badge-high">缺失</span> 无取消 API，无取消按钮</td>
+    </tr>
+    <tr>
+      <td><strong>跳过步骤</strong></td>
+      <td>某一步已经手动完成，直接标记为审批通过</td>
+      <td><span class="badge badge-high">缺失</span> 只能等 API 返回才能推进</td>
+    </tr>
+    <tr>
+      <td><strong>复制提示词 + 引用图</strong></td>
+      <td>一键复制提示词和关联图片，方便去外部工具使用</td>
+      <td><span class="badge badge-medium">部分</span> 有复制按钮，但不附带引用图片</td>
+    </tr>
+  </table>
+
+  <h3>为什么这是个严重问题</h3>
+  <ul style="margin: 0.5rem 0 0.5rem 1.5rem;">
+    <li>即梦 API 可能不稳定、超时、返回质量差的图片</li>
+    <li>10 分钟冷却期（<code>server.js</code> 中硬编码）意味着失败后要等很久才能重试</li>
+    <li>没有任何 "fallback 模式" — 系统一旦出问题，用户只能干等</li>
+  </ul>
+
+  <div class="suggestion">
+    <strong>方向：</strong>增加"手动模式"—— 可编辑提示词 textarea + 上传按钮 + 手动标记审批通过。让系统从"全自动管道"变成"自动化 + 可手动介入"的混合模式。
+  </div>
+</div>
+
+<!-- ====== PAIN POINT 4 ====== -->
+<h2>痛点四：次要但影响体验的问题</h2>
+
+<div class="grid-2">
+  <div class="card">
+    <h3><span class="badge badge-high">高</span> 双击渲染</h3>
+    <p><code>app.js:598-599</code> — <code>runTaskAction()</code> 在点击生成按钮后连续调用 <code>renderTask()</code> 和 <code>loadHistory()</code>，导致页面内容快速闪变两次。</p>
+  </div>
+  <div class="card">
+    <h3><span class="badge badge-medium">中</span> 10 分钟冷却无反馈</h3>
+    <p><code>server.js</code> 中硬编码 10 分钟冷却。前端只显示 "running" 状态，没有倒计时，没有预计剩余时间。用户不知道还要等多久。</p>
+  </div>
+  <div class="card">
+    <h3><span class="badge badge-medium">中</span> 无进度指示</h3>
+    <p>生成请求发出后，<code>setImmediate()</code> 在后台执行。前端没有任何进度条或状态指示，用户不知道是在排队、处理中、还是卡死了。</p>
+  </div>
+  <div class="card">
+    <h3><span class="badge badge-low">低</span> 设置页输入框可能丢失焦点</h3>
+    <p>如果用户在 Settings tab 编辑时恰好触发轮询，虽然 Settings 面板目前不重绘，但 tab 切换时可能状态不一致。</p>
+  </div>
+</div>
+
+<!-- ====== SUMMARY ====== -->
+<h2>总结：问题优先级矩阵</h2>
+
+<table>
+  <tr><th>优先级</th><th>问题</th><th>影响</th><th>修复复杂度</th></tr>
+  <tr><td><span class="badge badge-critical">P0</span></td><td>页面闪烁 / &lt;details&gt; 自动关闭</td><td>所有用户，每次使用</td><td>中 — 需要改渲染架构</td></tr>
+  <tr><td><span class="badge badge-critical">P0</span></td><td>无手动操作入口</td><td>系统异常时完全卡死</td><td>高 — 需要新 API + UI</td></tr>
+  <tr><td><span class="badge badge-high">P1</span></td><td>提示词不可编辑</td><td>无法调整生成质量</td><td>中 — textarea + 提交 API</td></tr>
+  <tr><td><span class="badge badge-high">P1</span></td><td>双击渲染</td><td>操作后画面闪烁</td><td>低 — 删一行代码</td></tr>
+  <tr><td><span class="badge badge-medium">P2</span></td><td>无上传入口</td><td>无法手动补全流程</td><td>中 — 上传 API + UI</td></tr>
+  <tr><td><span class="badge badge-medium">P2</span></td><td>无取消/进度指示</td><td>等待焦虑</td><td>低-中</td></tr>
+</table>
+
+<div class="summary-box">
+  <h2>核心架构问题</h2>
+  <p>P0 级别的前两个问题都指向同一个根因：<strong>全量 <code>innerHTML</code> 替换渲染</strong>。每次轮询或操作都把整个 DOM 子树销毁重建，导致：</p>
+  <ul style="margin: 0.5rem 0 0.5rem 1.5rem;">
+    <li>视觉闪烁（DOM 节点销毁→重建的间隙）</li>
+    <li>状态丢失（<code>&lt;details&gt;</code> 展开、输入框焦点、滚动位置）</li>
+    <li>用户交互被打断（点击后 DOM 重建导致事件目标消失）</li>
+  </ul>
+  <p><strong>建议方向：</strong>改为增量 DOM 更新。只更新状态真正变化的节点（如状态 badge、图片 URL），保留其余 DOM 不动。这样既能保持轮询的实时性，又不会引发闪烁和状态丢失。</p>
+</div>
+
+</body>
+</html>

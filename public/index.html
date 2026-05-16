@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Animal Video Studio</title>
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body>
+    <main class="shell">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">Animal Video Studio</p>
+          <h1 id="pageTitle">方案台</h1>
+          <p id="pageSubtitle" class="lede">首页只处理选题、方案确认和已确认动物入口。</p>
+        </div>
+        <div class="top-actions">
+          <span id="liveStatus" class="pill">等待同步</span>
+          <button id="homeBtn" class="small">首页</button>
+          <button id="refreshBtn" class="small">刷新</button>
+        </div>
+      </header>
+
+      <section id="homeView" class="home-grid">
+        <section class="panel plan-panel">
+          <div class="section-head">
+            <h2>方案工作流</h2>
+            <span id="homeStatus" class="pill">未选择</span>
+          </div>
+          <div class="plan-preview">
+            <div class="preview-title">Codex 写，页面同步</div>
+            <p>方向、方案、资产和分镜写入任务文件后，页面会自动更新。首页只保留方案相关动作。</p>
+          </div>
+          <div id="workflowPrompts" class="workflow-prompts"></div>
+          <p id="formMsg" class="message"></p>
+        </section>
+
+        <section class="panel proposal-panel">
+          <div class="section-head">
+            <h2>当前方案</h2>
+            <button id="approveScriptBtn" class="small" disabled>确认解说方案</button>
+          </div>
+          <div id="homeSummary" class="summary muted">生成或选择一个任务后，这里会显示方案状态。</div>
+          <pre id="brief" class="brief muted">暂无解说方案。</pre>
+        </section>
+
+        <section class="panel confirmed-panel">
+          <div class="section-head">
+            <h2>已确认动物</h2>
+            <span id="confirmedCount" class="pill">0</span>
+          </div>
+          <div id="confirmedAnimals" class="animal-grid"></div>
+        </section>
+
+        <section class="panel history-panel">
+          <div class="section-head">
+            <h2>全部任务</h2>
+            <span id="historyCount" class="pill">0</span>
+          </div>
+          <div id="history" class="history"></div>
+        </section>
+      </section>
+
+      <section id="taskView" class="task-view" hidden>
+        <section class="animal-hero">
+          <div>
+            <button id="backHomeBtn" class="text-button">返回首页</button>
+            <h2 id="animalTitle">动物工作台</h2>
+            <p id="animalSubtitle" class="lede">选择一个动物后进入专属生产页。</p>
+          </div>
+          <div id="taskSummary" class="summary compact muted"></div>
+        </section>
+
+        <nav class="tabs" aria-label="动物工作台">
+          <button class="tab is-active" data-tab="plan">方案</button>
+          <button class="tab" data-tab="assets">资产</button>
+          <button class="tab" data-tab="shots">分镜</button>
+          <button class="tab" data-tab="voice">配音</button>
+          <button class="tab" data-tab="settings">设置</button>
+        </nav>
+
+        <section class="panel tab-panel" data-panel="plan">
+          <div class="section-head">
+            <h2>方案</h2>
+            <span id="taskStatus" class="pill">未选择</span>
+          </div>
+          <div id="taskPlanBrief" class="brief muted">暂无解说方案。</div>
+        </section>
+
+        <section class="panel tab-panel" data-panel="assets" hidden>
+          <div class="section-head">
+            <h2>资产管理</h2>
+            <span class="muted">逐个生成并确认，不会自动批量消耗积分。</span>
+          </div>
+          <div id="assets" class="asset-sections muted">暂无资产。</div>
+        </section>
+
+        <section class="panel tab-panel" data-panel="shots" hidden>
+          <div class="section-head">
+            <h2>分镜</h2>
+            <span class="muted">每个镜头先用基础资产生成组合图，确认首帧后才能生成视频。</span>
+          </div>
+          <div id="shots" class="shots muted">暂无分镜。</div>
+        </section>
+
+        <section class="panel tab-panel" data-panel="voice" hidden>
+          <div class="section-head">
+            <h2>配音</h2>
+            <button id="copyAllVoice" class="small">复制全部</button>
+          </div>
+          <div id="voiceChunks" class="voice-list muted">暂无配音文案。</div>
+        </section>
+
+        <section class="panel tab-panel" data-panel="settings" hidden>
+          <div class="section-head">
+            <h2>设置</h2>
+            <button id="saveSettingsBtn" class="small">保存</button>
+          </div>
+          <div class="settings-grid">
+            <div class="field">
+              <label for="apiBase">即梦 API 地址</label>
+              <input id="apiBase" name="apiBase" value="http://127.0.0.1:5100">
+            </div>
+            <div class="field">
+              <label for="sessionId">SessionID</label>
+              <input id="sessionId" name="sessionId" type="password" placeholder="保存后刷新不用重输">
+            </div>
+            <button type="button" id="checkBtn">测试接口</button>
+          </div>
+        </section>
+      </section>
+    </main>
+
+    <div id="copyFallback" class="copy-fallback" hidden>
+      <div class="copy-box">
+        <div class="section-head">
+          <h2>手动复制</h2>
+          <button id="closeCopyFallback" class="small">关闭</button>
+        </div>
+        <p class="muted">当前浏览器没有放行自动复制。下面已选中文本，按 Cmd+C 复制。</p>
+        <textarea id="copyFallbackText" readonly></textarea>
+        <div class="button-row">
+          <button id="selectCopyFallback" class="small">重新选中</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="mediaPreview" class="media-preview" hidden>
+      <div class="media-preview-dialog" role="dialog" aria-modal="true" aria-labelledby="mediaPreviewTitle">
+        <div class="section-head">
+          <strong id="mediaPreviewTitle">媒体预览</strong>
+          <button id="closeMediaPreview" class="small">关闭</button>
+        </div>
+        <div id="mediaPreviewBody" class="media-preview-body"></div>
+      </div>
+    </div>
+
+    <div id="rescueDialog" class="media-preview" hidden>
+      <div class="media-preview-dialog" style="max-width: 600px;">
+        <div class="section-head">
+          <h3>手动补救 / 导入</h3>
+          <button id="closeRescueDialog" class="small">关闭</button>
+        </div>
+        <div class="rescue-body" style="padding: 10px 0;">
+          <p class="muted">如果 API 无法正常工作，您可以手动提供资源：</p>
+          
+          <div class="field" style="margin-bottom: 20px;">
+            <label>方式 A: 提供 URL 链接 (自动从云端拉取)</label>
+            <input type="text" id="rescueUrl" placeholder="粘贴即梦 CDN 链接...">
+            <button id="rescueViaUrlBtn" class="small" style="margin-top: 8px;">提交链接并下载</button>
+          </div>
+
+          <div class="field">
+            <label>方式 B: 上传本地文件</label>
+            <input type="file" id="rescueFileInput" style="padding: 5px;" accept="image/png,image/jpeg,video/mp4">
+            <button id="rescueViaFileBtn" class="small" style="margin-top: 8px;">开始上传文件</button>
+          </div>
+
+          <p id="rescueMsg" class="message" style="font-size: 13px;"></p>
+        </div>
+      </div>
+    </div>
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>
