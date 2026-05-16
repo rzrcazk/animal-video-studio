@@ -343,14 +343,25 @@ function renderAssets(task, assets) {
     const canCompose = ready && !isRunning && !shot.approvedFirstFrame && status !== "done";
     const canApprove = firstFrameFileUrl && !shot.approvedFirstFrame;
 
+    // 将引用转换为标签
+    const refTags = (shot.assetRefs || []).map(id => {
+      const name = nameMap.get(id) || id;
+      const typeClass = id === "hero-main" ? "tag-hero" : (id.startsWith("scene") ? "tag-scene" : "tag-prop");
+      return `<span class="asset-tag ${typeClass}" data-ref-id="${escapeHtml(id)}">${escapeHtml(name)}</span>`;
+    }).join("");
+
     return `
-      <article class="asset-card composition-card" data-asset-id="composition-${shot.id}">
+      <article class="asset-card composition-card" data-asset-id="composition-${shot.id}" data-refs="${escapeHtml((shot.assetRefs || []).join(","))}">
         <div class="card-head">
           <strong>#${shot.id} · ${escapeHtml(shot.stage)} 组合图</strong>
           <span class="pill ${shot.approvedFirstFrame ? "status-done" : statusClass(status)}">${shot.approvedFirstFrame ? "已确认" : statusText(status)}</span>
         </div>
-        <p class="muted">引用：${escapeHtml((shot.assetRefs || []).map((id) => nameMap.get(id) || id).join(" / "))}</p>
+        <div class="asset-refs">引用：${refTags}</div>
         ${shotImagePreviewMarkup(shot.compositionUrl, shot.compositionFile || shot.firstFrameFile, `镜头 ${shot.id} 组合图`)}
+        <details>
+          <summary>组合提示词</summary>
+          <p class="prompt">${escapeHtml(shot.firstFramePrompt)}</p>
+        </details>
         ${runningMsg ? `<p class="message info">${escapeHtml(runningMsg)}</p>` : ""}
         <div class="shot-actions">
           <button class="small ${canCompose ? "primary" : ""}" data-composition="${shot.id}" ${!ready || isRunning ? "disabled" : ""}>生成组合图</button>
@@ -502,6 +513,39 @@ function bindTaskButtons(task) {
   document.querySelectorAll("[data-rescue-asset]").forEach(b => b.onclick = () => openRescueDialog("asset", b.dataset.rescueAsset));
   document.querySelectorAll("[data-rescue-frame]").forEach(b => b.onclick = () => openRescueDialog("shot", b.dataset.rescueFrame, "frame"));
   document.querySelectorAll("[data-rescue-video]").forEach(b => b.onclick = () => openRescueDialog("shot", b.dataset.rescueVideo, "video"));
+
+  // 绑定悬停高亮逻辑 (关联基础资产与组合图)
+  bindAssetLinkage();
+}
+
+function bindAssetLinkage() {
+  const assets = document.querySelectorAll(".asset-card:not(.composition-card)");
+  const compositions = document.querySelectorAll(".composition-card");
+
+  assets.forEach(card => {
+    const id = card.dataset.assetId;
+    card.onmouseenter = () => {
+      compositions.forEach(comp => {
+        const refs = comp.dataset.refs?.split(",") || [];
+        if (refs.includes(id)) comp.classList.add("is-related");
+      });
+    };
+    card.onmouseleave = () => {
+      compositions.forEach(comp => comp.classList.remove("is-related"));
+    };
+  });
+
+  compositions.forEach(card => {
+    const refs = card.dataset.refs?.split(",") || [];
+    card.onmouseenter = () => {
+      assets.forEach(asset => {
+        if (refs.includes(asset.dataset.assetId)) asset.classList.add("is-related");
+      });
+    };
+    card.onmouseleave = () => {
+      assets.forEach(asset => asset.classList.remove("is-related"));
+    };
+  });
 }
 
 let currentRescueContext = null;

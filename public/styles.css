@@ -712,3 +712,54 @@ a {
     flex-direction: column;
   }
 }
+
+/* UI Enhancements for Asset Management */
+.asset-refs {
+  margin-top: 8px;
+  font-size: 13px;
+  color: var(--muted);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.asset-tag {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  border: 1px solid var(--line);
+  background: #f8f8f8;
+  color: var(--ink);
+}
+
+.tag-hero {
+  background: #E3F0DF;
+  border-color: #257348;
+  color: #1B5E3A;
+}
+
+.tag-scene {
+  background: #DDEBFF;
+  border-color: #235FB9;
+  color: #1A468A;
+}
+
+.tag-prop {
+  background: #FFF0BF;
+  border-color: #82662C;
+  color: #5D481F;
+}
+
+.asset-card {
+  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+}
+
+.asset-card.is-related {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(214, 90, 42, 0.25);
+  transform: translateY(-2px);
+  z-index: 5;
+}
