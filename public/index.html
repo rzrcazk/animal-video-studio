@@ -162,7 +162,24 @@
           <button id="closeRescueDialog" class="small">关闭</button>
         </div>
         <div class="rescue-body" style="padding: 10px 0;">
-          <p class="muted">如果 API 无法正常工作，您可以手动提供资源：</p>
+          <div id="rescueContext" class="rescue-context" style="margin-bottom: 20px; padding: 12px; background: #f0f4f2; border-radius: 6px; border: 1px solid #d1d9d4;">
+            <h4 style="margin: 0 0 10px 0; font-size: 14px; color: #315C46;">生产包 (由系统加工生成的指令)</h4>
+            <div class="field">
+              <label style="font-size: 12px; color: #666;">加工后的完整提示词</label>
+              <div style="position: relative;">
+                <textarea id="rescuePromptText" readonly style="width:100%; height: 80px; font-size: 12px; padding: 8px; background: #fff; border: 1px solid #ccc; border-radius: 4px; resize: none;"></textarea>
+                <button id="copyRescuePromptBtn" class="small" style="position: absolute; right: 5px; top: 5px; padding: 2px 8px;">复制</button>
+              </div>
+            </div>
+            <div id="rescueRefsContainer" class="field" style="margin-top: 10px;">
+              <label style="font-size: 12px; color: #666;">参考资产 (建议下载并喂给 AI)</label>
+              <div id="rescueRefsList" style="display: flex; gap: 10px; margin-top: 5px; flex-wrap: wrap;">
+                <!-- 动态插入资产链接 -->
+              </div>
+            </div>
+          </div>
+
+          <p class="muted">上传说明：在外部生成满意后，请提供资源：</p>
           
           <div class="field" style="margin-bottom: 20px;">
             <label>方式 A: 提供 URL 链接 (自动从云端拉取)</label>

@@ -128,6 +128,33 @@ function requestPayload() {
   };
 }
 
+async function savePrompt(taskId, type, itemId, buttonEl, field = "prompt") {
+  const container = buttonEl.closest(".prompt-editor-container");
+  const textarea = container.querySelector("textarea");
+  const newValue = textarea.value.trim();
+  
+  buttonEl.disabled = true;
+  buttonEl.textContent = "保存中...";
+  
+  try {
+    const payload = {
+      type,
+      itemId,
+      [field]: newValue
+    };
+    const task = await api(`/api/tasks/${taskId}/update-prompt`, {
+      method: "POST",
+      body: JSON.stringify(payload)
+    });
+    renderTask(task);
+    setMessage("提示词已更新");
+  } catch (e) {
+    setMessage(e.message, true);
+    buttonEl.disabled = false;
+    buttonEl.textContent = "保存失败";
+  }
+}
+
 function statusClass(status) {
   if (status === "done") return "status-done";
   if (status === "failed" || status === "partial") return "status-failed";
@@ -282,6 +309,10 @@ function renderTask(task) {
 
   $("taskPlanBrief").textContent = task.briefMarkdown || task.directionMarkdown || "暂无解说方案。";
   
+  // 显示短 ID 供 chat 引用
+  const shortId = task.id.split("__").pop();
+  $("taskStatus").innerHTML = `${task.script ? "制作阶段" : "方向阶段"} <span class="copyable-id" title="点击复制 ID" data-copy="${shortId}">ID: ${shortId}</span>`;
+  
   const assetsStates = saveDetailsStates($("assets"));
   const shotsStates = saveDetailsStates($("shots"));
 
@@ -318,10 +349,11 @@ function renderAssets(task, assets) {
         </div>
         <p class="muted">${escapeHtml(asset.type)} · ${escapeHtml(asset.id)}</p>
         ${shotImagePreviewMarkup(asset.remoteUrl, asset.file, asset.name)}
-        <details>
-          <summary>提示词</summary>
-          <p class="prompt">${escapeHtml(asset.prompt)}</p>
-        </details>
+        <div class="prompt-editor-container">
+          <label>基础资产提示词</label>
+          <textarea class="prompt-editor" data-asset-prompt="${escapeHtml(asset.id)}">${escapeHtml(asset.prompt)}</textarea>
+          <button class="small" onclick="savePrompt('${escapeHtml(task.id)}', 'asset', '${escapeHtml(asset.id)}', this)">保存提示词</button>
+        </div>
         <div class="shot-actions">
           <button class="small ${canGenerate ? "primary" : ""}" data-generate-asset="${escapeHtml(asset.id)}" ${!task.scriptApproved || isRunning ? "disabled" : ""}>生成基础资产</button>
           <button class="small ${canApprove ? "primary" : ""}" data-approve-asset="${escapeHtml(asset.id)}" ${!asset.file || asset.approved ? "disabled" : ""}>确认资产</button>
@@ -358,10 +390,11 @@ function renderAssets(task, assets) {
         </div>
         <div class="asset-refs">引用：${refTags}</div>
         ${shotImagePreviewMarkup(shot.compositionUrl, shot.compositionFile || shot.firstFrameFile, `镜头 ${shot.id} 组合图`)}
-        <details>
-          <summary>组合提示词</summary>
-          <p class="prompt">${escapeHtml(shot.firstFramePrompt)}</p>
-        </details>
+        <div class="prompt-editor-container">
+          <label>组合提示词 (包含角色+场景)</label>
+          <textarea class="prompt-editor" data-shot-prompt="${shot.id}">${escapeHtml(shot.firstFramePrompt)}</textarea>
+          <button class="small" onclick="savePrompt('${escapeHtml(task.id)}', 'shot', '${shot.id}', this, 'prompt')">保存提示词</button>
+        </div>
         ${runningMsg ? `<p class="message info">${escapeHtml(runningMsg)}</p>` : ""}
         <div class="shot-actions">
           <button class="small ${canCompose ? "primary" : ""}" data-composition="${shot.id}" ${!ready || isRunning ? "disabled" : ""}>生成组合图</button>
@@ -419,8 +452,18 @@ function renderShots(task, shots) {
         <p>${escapeHtml(shot.narration)}</p>
         <p class="muted">组合图状态：${shot.approvedFirstFrame ? "已确认" : statusText(compositionStatus)}</p>
         ${shotImagePreviewMarkup(shot.compositionUrl, shot.compositionFile || shot.firstFrameFile, `镜头 ${shot.id} 首帧`, "preview wide")}
-        <details><summary>首帧提示词</summary><p class="prompt">${escapeHtml(shot.firstFramePrompt)}</p></details>
-        <details><summary>视频提示词</summary><p class="prompt">${escapeHtml(shot.videoPrompt)}</p></details>
+        <div class="prompt-editor-grid">
+          <div class="prompt-editor-container">
+            <label>首帧提示词</label>
+            <textarea class="prompt-editor" data-shot-prompt-frame="${shot.id}">${escapeHtml(shot.firstFramePrompt)}</textarea>
+            <button class="small" onclick="savePrompt('${escapeHtml(task.id)}', 'shot', '${shot.id}', this, 'prompt')">保存首帧词</button>
+          </div>
+          <div class="prompt-editor-container">
+            <label>视频提示词 (核心逻辑)</label>
+            <textarea class="prompt-editor" data-shot-prompt-video="${shot.id}">${escapeHtml(shot.videoPrompt)}</textarea>
+            <button class="small" onclick="savePrompt('${escapeHtml(task.id)}', 'shot', '${shot.id}', this, 'videoPrompt')">保存视频词</button>
+          </div>
+        </div>
         <div class="shot-actions">
           <button class="small ${canCompose ? "primary" : ""}" data-composition="${shot.id}" ${compositionRunning ? "disabled" : ""}>生成组合图</button>
           <button class="small ${canApproveFrame ? "primary" : ""}" data-approve-frame="${shot.id}" ${!firstFrameReady || shot.approvedFirstFrame ? "disabled" : ""}>确认首帧</button>
@@ -514,6 +557,22 @@ function bindTaskButtons(task) {
   document.querySelectorAll("[data-rescue-frame]").forEach(b => b.onclick = () => openRescueDialog("shot", b.dataset.rescueFrame, "frame"));
   document.querySelectorAll("[data-rescue-video]").forEach(b => b.onclick = () => openRescueDialog("shot", b.dataset.rescueVideo, "video"));
 
+  // 绑定 ID 复制点击
+  document.querySelectorAll(".copyable-id").forEach(el => {
+    el.onclick = () => {
+      const text = el.dataset.copy;
+      navigator.clipboard.writeText(text).then(() => {
+        const original = el.textContent;
+        el.textContent = "已复制！";
+        el.classList.add("copied");
+        setTimeout(() => {
+          el.textContent = original;
+          el.classList.remove("copied");
+        }, 1000);
+      });
+    };
+  });
+
   // 绑定悬停高亮逻辑 (关联基础资产与组合图)
   bindAssetLinkage();
 }
@@ -559,7 +618,54 @@ function openRescueDialog(type, id, subType = "") {
   
   const title = type === "asset" ? `资产 ${id}` : `分镜 ${id} (${subType === "video" ? "视频" : "首帧"})`;
   $("rescueDialog").querySelector("h3").textContent = `手动补救: ${title}`;
+
+  // 填充生产包信息
+  const task = state.currentTask;
+  let prompt = "";
+  let refs = [];
+
+  if (type === "asset") {
+    const asset = task.assets.find(a => a.id === id);
+    prompt = asset?.prompt || "";
+    $("rescueRefsContainer").hidden = true; // 基础资产没有参考图
+  } else {
+    const shot = task.shots.find(s => s.id === Number(id));
+    // 使用后端预计算好的加工提示词
+    prompt = (subType === "video" ? shot?.videoPrompt : shot?.processedCompositionPrompt) || "";
+    refs = shot?.assetRefs || [];
+    $("rescueRefsContainer").hidden = refs.length === 0;
+  }
+
+  $("rescuePromptText").value = prompt;
+  
+  // 渲染参考资产链接
+  const listEl = $("rescueRefsList");
+  listEl.innerHTML = "";
+  if (refs.length) {
+    const map = new Map(task.assets.map(a => [a.id, a]));
+    refs.forEach(refId => {
+      const asset = map.get(refId);
+      if (asset && asset.file) {
+        const url = localFileToUrl(asset.file);
+        listEl.innerHTML += `
+          <div style="text-align: center;">
+            <img src="${url}" style="width: 60px; height: 60px; object-fit: cover; border-radius: 4px; border: 1px solid #ddd; display: block; cursor: pointer;" onclick="window.open('${url}')">
+            <span style="font-size: 10px; color: #999;">${escapeHtml(asset.name || refId)}</span>
+          </div>
+        `;
+      }
+    });
+  }
 }
+
+$("copyRescuePromptBtn").onclick = async () => {
+  const btn = $("copyRescuePromptBtn");
+  const res = await copyText($("rescuePromptText").value);
+  if (res === "copied") {
+    btn.textContent = "已复制";
+    setTimeout(() => btn.textContent = "复制", 1500);
+  }
+};
 
 async function submitRescue(mode) {
   const { type, id, subType } = currentRescueContext;

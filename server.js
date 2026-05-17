@@ -49,7 +49,7 @@ function shouldLogLocalApi(req, pathname) {
   if (req.method === "POST" && pathname === "/api/tasks") return true;
   if (req.method === "POST" && pathname === "/api/check-jimeng") return true;
   if (req.method === "DELETE") return true;
-  return /\/(generate|first-frame|composition|approve|approve-script|approve-first-frame)$/u.test(pathname);
+  return /\/(generate|first-frame|composition|approve|approve-script|approve-first-frame|review\/request|review\/clear)$/u.test(pathname);
 }
 
 function json(res, status, data) {
@@ -214,6 +214,13 @@ async function getTask(id) {
       if (shot.firstFrameFile) shot.firstFrameFile = ensureLocalPath(shot.firstFrameFile);
       if (shot.compositionFile) shot.compositionFile = ensureLocalPath(shot.compositionFile);
       
+      // 预计算加工后的完整提示词，供 UI 手动补救使用
+      try {
+        shot.processedCompositionPrompt = compositionPrompt(task, shot);
+      } catch (e) {
+        shot.processedCompositionPrompt = shot.firstFramePrompt || "";
+      }
+
       // 清理卡死的视频生成状态
       if (shot.status === "running") {
         const started = shot.startedAt ? Date.parse(shot.startedAt) : 0;
@@ -374,6 +381,63 @@ async function importResource(taskIdValue, payload, isMultipart = false) {
   await saveTask(tasksDir, task);
   return task;
 }
+
+async function requestReview(taskIdValue, type, targetId) {
+  const task = await getTask(taskIdValue);
+  if (type === "asset") {
+    const asset = task.assets.find(a => a.id === targetId);
+    if (!asset) throw new Error(`找不到资产 ${targetId}`);
+    asset.reviewRequested = true;
+  } else if (type === "shot") {
+    const shot = task.shots.find(s => s.id === Number(targetId));
+    if (!shot) throw new Error(`找不到分镜 ${targetId}`);
+    shot.reviewRequested = true;
+  } else if (type === "script") {
+    task.reviewRequested = true;
+  }
+  await saveTask(tasksDir, task);
+  return task;
+}
+
+async function clearReview(taskIdValue, type, targetId) {
+  const task = await getTask(taskIdValue);
+  if (type === "asset") {
+    const asset = task.assets.find(a => a.id === targetId);
+    if (!asset) throw new Error(`找不到资产 ${targetId}`);
+    asset.expertFeedback = null;
+    asset.reviewRequested = false;
+  } else if (type === "shot") {
+    const shot = task.shots.find(s => s.id === Number(targetId));
+    if (!shot) throw new Error(`找不到分镜 ${targetId}`);
+    shot.expertFeedback = null;
+    shot.reviewRequested = false;
+  } else if (type === "script") {
+    task.expertFeedback = null;
+    task.reviewRequested = false;
+  }
+  await saveTask(tasksDir, task);
+  return task;
+}
+
+async function updatePrompt(taskIdValue, payload) {
+  const { type, itemId, prompt, videoPrompt } = payload;
+  const task = await getTask(taskIdValue);
+  if (type === "asset") {
+    const asset = task.assets.find(a => a.id === itemId);
+    if (asset) {
+      asset.prompt = prompt;
+    }
+  } else if (type === "shot") {
+    const shot = task.shots.find(s => s.id === Number(itemId));
+    if (shot) {
+      if (prompt !== undefined) shot.firstFramePrompt = prompt;
+      if (videoPrompt !== undefined) shot.videoPrompt = videoPrompt;
+    }
+  }
+  await saveTask(tasksDir, task);
+  return task;
+}
+
 
 async function runBackground(fn) {
   try {
@@ -762,6 +826,21 @@ const server = http.createServer(async (req, res) => {
         const payload = await readJson(req);
         return json(res, 200, await importResource(decodeURIComponent(importMatch[1]), payload, false));
       }
+    }
+    const updatePromptMatch = url.pathname.match(/^\/api\/tasks\/([^/]+)\/update-prompt$/);
+    if (req.method === "POST" && updatePromptMatch) {
+      const payload = await readJson(req);
+      return json(res, 200, await updatePrompt(decodeURIComponent(updatePromptMatch[1]), payload));
+    }
+    const reviewRequestMatch = url.pathname.match(/^\/api\/tasks\/([^/]+)\/review\/request$/);
+    if (req.method === "POST" && reviewRequestMatch) {
+      const payload = await readJson(req);
+      return json(res, 200, await requestReview(decodeURIComponent(reviewRequestMatch[1]), payload.type, payload.targetId));
+    }
+    const reviewClearMatch = url.pathname.match(/^\/api\/tasks\/([^/]+)\/review\/clear$/);
+    if (req.method === "POST" && reviewClearMatch) {
+      const payload = await readJson(req);
+      return json(res, 200, await clearReview(decodeURIComponent(reviewClearMatch[1]), payload.type, payload.targetId));
     }
     if (req.method === "GET" && url.pathname.startsWith("/api/tasks/")) {
       return json(res, 200, await getTask(decodeURIComponent(url.pathname.split("/").at(-1))));
